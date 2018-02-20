@@ -1,5 +1,13 @@
 package mapreduce
 
+import (
+	"bufio"
+	"encoding/json"
+	"log"
+	"os"
+	"sort"
+)
+
 func doReduce(
 	jobName string, // the name of the whole MapReduce job
 	reduceTask int, // which reduce task this is
@@ -44,4 +52,57 @@ func doReduce(
 	//
 	// Your code here (Part I).
 	//
+
+	// 	(1) Create key:list(value) map
+	keyListVal := make(map[string][]string)
+
+	//	(2) loop nMap
+	//			interfileName
+	//			file = os.open(interfileName)
+	//			bufio.bufferedReader(file)
+	//			dec json.NewDecoder
+	//			for dec.more()
+	for i := 0; i < nMap; i++ {
+		interFileName := reduceName(jobName, i, reduceTask)
+		intFile, err := os.Open(interFileName)
+		if err != nil {
+			log.Fatal(err)
+		}
+		intFileReader := bufio.NewReader(intFile)
+		dec := json.NewDecoder(intFileReader)
+
+		for dec.More() {
+			var line KeyValue
+			if err := dec.Decode(&line); err != nil {
+				log.Println(err)
+			}
+			keyListVal[line.Key] = append(keyListVal[line.Key], line.Value)
+		}
+
+		intFile.Close()
+	}
+
+	//	(3) create output file and encoder
+	outF, err := os.Create(outFile)
+	if err != nil {
+		log.Fatal(err)
+	}
+	bufW := bufio.NewWriter(outF)
+	enc := json.NewEncoder(bufW)
+
+	// 	(4) create sorted keys slice
+	var sortedKeys []string
+	for key := range keyListVal {
+		sortedKeys = append(sortedKeys, key)
+	}
+	sort.Strings(sortedKeys)
+
+	//	(5) loop sortedKeys
+	//			enc.Encode(KeyValue{sortedKey, reduceF(keyListVal[sortedKey]))
+	for _, sortedKey := range sortedKeys {
+		enc.Encode(KeyValue{Key: sortedKey, Value: reduceF(sortedKey, keyListVal[sortedKey])})
+	}
+
+	bufW.Flush()
+	outF.Close()
 }

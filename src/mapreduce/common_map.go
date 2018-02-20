@@ -1,7 +1,12 @@
 package mapreduce
 
 import (
+	"bufio"
+	"encoding/json"
 	"hash/fnv"
+	"io/ioutil"
+	"log"
+	"os"
 )
 
 func doMap(
@@ -53,6 +58,53 @@ func doMap(
 	//
 	// Your code here (Part I).
 	//
+
+	// (1) 	Read file into buffer
+	//		Close file
+	bytes, err := ioutil.ReadFile(inFile)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// (2) 	Call mapF() on file content to get kvp's
+	keyValues := mapF(inFile, string(bytes))
+
+	// (3) 	Create intermediate file map
+	//		Iterate through kvp
+	//     		Hash key to get R job number
+	//     		Append KeyValue to intermediate file
+	reduceMap := make(map[string][]KeyValue)
+
+	for _, keyValue := range keyValues {
+		intermediateFile := reduceName(jobName, mapTask, ihash(keyValue.Key)%nReduce)
+		reduceMap[intermediateFile] = append(reduceMap[intermediateFile], keyValue)
+	}
+
+	// (4) 	Iterate over reduceMap
+	//			os.create intermediate file
+	//			create a bufio.writer on file
+	//			create newEncoder on bufio.writer
+	// 			Iterate over keyValues for each intermediate file
+	//				encode each keyValue
+	//			writer.flush
+	//			close file
+	for intermediateFile, keyValues := range reduceMap {
+		file, err := os.Create(intermediateFile)
+		if err != nil {
+			log.Fatal(err)
+		}
+		bufW := bufio.NewWriter(file)
+		enc := json.NewEncoder(bufW)
+
+		for _, keyValue := range keyValues {
+			if err := enc.Encode(keyValue); err != nil {
+				log.Println(err)
+			}
+		}
+
+		bufW.Flush()
+		file.Close()
+	}
 }
 
 func ihash(s string) int {
